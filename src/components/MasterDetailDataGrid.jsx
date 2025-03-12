@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { DataGrid, GridRow } from "@mui/x-data-grid";
-import { Box, IconButton, Paper, Tab, Tabs, Typography } from "@mui/material";
+import { Box, IconButton, Paper, Tab, Tabs, Typography, TextField, Stack } from "@mui/material";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import { styled } from "@mui/material/styles";
@@ -34,6 +34,22 @@ const TabPanel = (props) => {
 const MasterDetailDataGrid = () => {
     const [expandedRows, setExpandedRows] = useState({});
     const [tabValues, setTabValues] = useState({});
+    const [filters, setFilters] = useState({
+        firstName: '',
+        lastName: '',
+        age: '',
+        city: ''
+    });
+
+    // Filter the master rows based on the filter values
+    const filteredRows = masterRows.filter(row => {
+        return (
+            row.firstName.toLowerCase().includes(filters.firstName.toLowerCase()) &&
+            row.lastName.toLowerCase().includes(filters.lastName.toLowerCase()) &&
+            (filters.age === '' || row.age.toString().includes(filters.age)) &&
+            row.city.toLowerCase().includes(filters.city.toLowerCase())
+        );
+    });
 
     // Master grid columns
     const masterColumns = [
@@ -180,7 +196,8 @@ const MasterDetailDataGrid = () => {
         );
     };
 
-    const rows = masterRows.reduce((acc, row) => {
+    // Create the rows with detail panels
+    const rows = filteredRows.reduce((acc, row) => {
         acc.push(row);
         if (expandedRows[row.id]) {
             acc.push({
@@ -192,15 +209,66 @@ const MasterDetailDataGrid = () => {
         return acc;
     }, []);
 
+    const handleFilterChange = (field) => (event) => {
+        setFilters(prev => ({
+            ...prev,
+            [field]: event.target.value
+        }));
+    };
+
     return (
         <Paper sx={{ width: "100%", overflow: "hidden" }}>
             <Typography variant="h5" component="h1" sx={{ p: 2 }}>
                 Customer Information
             </Typography>
+
+            {/* External Filters */}
+            <Box sx={{ p: 2 }}>
+                <Stack 
+                    direction="row" 
+                    spacing={2} 
+                    sx={{ mb: 2 }}
+                >
+                    <TextField
+                        label="First Name"
+                        variant="outlined"
+                        size="small"
+                        value={filters.firstName}
+                        onChange={handleFilterChange('firstName')}
+                    />
+                    <TextField
+                        label="Last Name"
+                        variant="outlined"
+                        size="small"
+                        value={filters.lastName}
+                        onChange={handleFilterChange('lastName')}
+                    />
+                    <TextField
+                        label="Age"
+                        variant="outlined"
+                        size="small"
+                        type="number"
+                        value={filters.age}
+                        onChange={handleFilterChange('age')}
+                    />
+                    <TextField
+                        label="City"
+                        variant="outlined"
+                        size="small"
+                        value={filters.city}
+                        onChange={handleFilterChange('city')}
+                    />
+                </Stack>
+            </Box>
+
+            {/* DataGrid */}
             <Box sx={{ width: "100%" }}>
                 <DataGrid
                     rows={rows}
-                    columns={masterColumns}
+                    columns={masterColumns.map(col => ({
+                        ...col,
+                        filterable: false
+                    }))}
                     pageSize={10}
                     rowsPerPageOptions={[10]}
                     disableSelectionOnClick
@@ -236,6 +304,7 @@ const MasterDetailDataGrid = () => {
                             overflow: 'visible !important',
                         }
                     }}
+                    disableColumnFilter
                 />
             </Box>
         </Paper>
