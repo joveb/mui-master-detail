@@ -65,6 +65,9 @@ const MasterDetailDataGrid = () => {
         pageSize: 5,
         page: 0
     });
+    
+    // Add sort model for master table
+    const [sortModel, setSortModel] = useState([]);
 
     // Add request tracking refs for master table
     const masterRequestIdRef = useRef('');
@@ -90,8 +93,11 @@ const MasterDetailDataGrid = () => {
     ];
 
     const fetchUsers = useCallback(async () => {
-        // Create a unique request ID for this master request
-        const requestId = `master-${paginationModel.page}-${paginationModel.pageSize}-${++masterRequestCountRef.current}`;
+        // Create a unique request ID for this master request that includes sorting
+        const sortParam = sortModel.length > 0 
+            ? `${sortModel[0].field}-${sortModel[0].sort}` 
+            : 'default';
+        const requestId = `master-${paginationModel.page}-${paginationModel.pageSize}-${sortParam}-${++masterRequestCountRef.current}`;
         
         // Skip if this exact request is already in progress
         if (masterRequestIdRef.current === requestId) {
@@ -106,12 +112,18 @@ const MasterDetailDataGrid = () => {
         
         try {
             setLoading(true);
-            console.log(`Starting master fetch #${masterRequestCountRef.current} for page ${paginationModel.page}`);
+            console.log(`Starting master fetch #${masterRequestCountRef.current} for page ${paginationModel.page}, sort: ${sortParam}`);
             
             const params = new URLSearchParams({
                 _page: paginationModel.page + 1,
                 _limit: paginationModel.pageSize
             });
+
+            // Add sorting parameters if available
+            if (sortModel.length > 0) {
+                params.append('_sort', sortModel[0].field);
+                params.append('_order', sortModel[0].sort === 'asc' ? 'asc' : 'desc');
+            }
 
             // Add a small delay to prevent rapid consecutive requests
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -122,7 +134,7 @@ const MasterDetailDataGrid = () => {
                 return;
             }
             
-            console.log(`Making master API call to users [${requestId}]`);
+            console.log(`Making master API call to users?${params} [${requestId}]`);
             const response = await axios.get(
                 `https://jsonplaceholder.typicode.com/users?${params}`
             );
@@ -159,7 +171,7 @@ const MasterDetailDataGrid = () => {
             isCancelled = true;
             console.log(`Cleaning up master request ${requestId}`);
         };
-    }, [paginationModel.page, paginationModel.pageSize]);
+    }, [paginationModel.page, paginationModel.pageSize, sortModel]);
 
     // Initial load and pagination changes
     useEffect(() => {
@@ -176,6 +188,7 @@ const MasterDetailDataGrid = () => {
             pageSize: 5,
             page: 0
         });
+        const [detailSortModel, setDetailSortModel] = useState([]);
         const [isLoading, setIsLoading] = useState(false);
         const [detailRows, setDetailRows] = useState([]);
         const [detailTotalCount, setDetailTotalCount] = useState(0);
@@ -187,8 +200,11 @@ const MasterDetailDataGrid = () => {
         
         // Fetch data on mount, tab change, or pagination change
         useEffect(() => {
-            // Create a unique request ID
-            const requestId = `${rowId}-${activeTab}-${detailPaginationModel.page}-${detailPaginationModel.pageSize}-${++requestCountRef.current}`;
+            // Create a unique request ID that includes sorting
+            const sortParam = detailSortModel.length > 0 
+                ? `${detailSortModel[0].field}-${detailSortModel[0].sort}` 
+                : 'default';
+            const requestId = `${rowId}-${activeTab}-${detailPaginationModel.page}-${detailPaginationModel.pageSize}-${sortParam}-${++requestCountRef.current}`;
             let isCancelled = false;
             
             // Skip if this exact request is already in progress
@@ -204,7 +220,7 @@ const MasterDetailDataGrid = () => {
                 if (isCancelled) return;
                 
                 setIsLoading(true);
-                console.log(`Starting fetch #${requestCountRef.current} for row ${rowId}, tab ${activeTab}, page ${detailPaginationModel.page}`);
+                console.log(`Starting fetch #${requestCountRef.current} for row ${rowId}, tab ${activeTab}, page ${detailPaginationModel.page}, sort: ${sortParam}`);
                 
                 try {
                     let endpoint;
@@ -227,6 +243,12 @@ const MasterDetailDataGrid = () => {
                         _page: detailPaginationModel.page + 1,
                         _limit: detailPaginationModel.pageSize
                     });
+                    
+                    // Add sorting parameters if available
+                    if (detailSortModel.length > 0) {
+                        params.append('_sort', detailSortModel[0].field);
+                        params.append('_order', detailSortModel[0].sort === 'asc' ? 'asc' : 'desc');
+                    }
                     
                     // Add a delay to prevent rapid multiple fetches
                     await new Promise(resolve => setTimeout(resolve, 50));
@@ -267,23 +289,29 @@ const MasterDetailDataGrid = () => {
                 isCancelled = true;
                 console.log(`Cleaning up effect for ${requestId}`);
             };
-        }, [rowId, activeTab, detailPaginationModel.page, detailPaginationModel.pageSize]); // fetchDetailData is defined inside useEffect so it's not needed as a dependency
+        }, [rowId, activeTab, detailPaginationModel.page, detailPaginationModel.pageSize, detailSortModel]); // Added detailSortModel as dependency
         
         const handlePaginationModelChange = useCallback((newModel) => {
             console.log('Pagination model changed:', newModel);
             setDetailPaginationModel(newModel);
         }, []);
 
-            const handleTabChange = (event, newValue) => {
+        const handleSortModelChange = useCallback((newModel) => {
+            console.log('Sort model changed:', newModel);
+            setDetailSortModel(newModel);
+        }, []);
+
+        const handleTabChange = (event, newValue) => {
             console.log('Tab changed to:', newValue);
             setTabValues(prev => ({
-                    ...prev,
+                ...prev,
                 [rowId]: newValue
             }));
             setDetailPaginationModel({
                 pageSize: 5,
                 page: 0
             });
+            setDetailSortModel([]);
         };
         
         console.log('Rendering DetailPanel', { 
@@ -292,64 +320,74 @@ const MasterDetailDataGrid = () => {
             isLoading, 
             rowCount: detailRows.length,
             paginationModel: detailPaginationModel,
+            sortModel: detailSortModel,
             requestCount: requestCountRef.current
         });
 
-            return (
+        return (
             <Box sx={{ width: '100%', p: 2 }}>
                 <Tabs value={activeTab} onChange={handleTabChange}>
                     <Tab label="Posts" />
                     <Tab label="Comments" />
                     <Tab label="Albums" />
-                        </Tabs>
+                </Tabs>
 
-                    <TabPanel value={activeTab} index={0}>
-                            <DataGrid
+                <TabPanel value={activeTab} index={0}>
+                    <DataGrid
                         rows={detailRows}
                         columns={postsColumns}
                         paginationModel={detailPaginationModel}
                         onPaginationModelChange={handlePaginationModelChange}
+                        sortModel={detailSortModel}
+                        onSortModelChange={handleSortModelChange}
                         pageSizeOptions={[5, 10, 15]}
                         paginationMode="server"
+                        sortingMode="server"
                         rowCount={detailTotalCount}
                         loading={isLoading}
-                                autoHeight
+                        autoHeight
                         disableColumnFilter
                         disableColumnMenu
-                            />
-                    </TabPanel>
+                    />
+                </TabPanel>
 
-                    <TabPanel value={activeTab} index={1}>
-                            <DataGrid
+                <TabPanel value={activeTab} index={1}>
+                    <DataGrid
                         rows={detailRows}
                         columns={commentsColumns}
                         paginationModel={detailPaginationModel}
                         onPaginationModelChange={handlePaginationModelChange}
+                        sortModel={detailSortModel}
+                        onSortModelChange={handleSortModelChange}
                         pageSizeOptions={[5, 10, 15]}
                         paginationMode="server"
+                        sortingMode="server"
                         rowCount={detailTotalCount}
                         loading={isLoading}
-                                autoHeight
+                        autoHeight
                         disableColumnFilter
                         disableColumnMenu
-                            />
-                    </TabPanel>
+                    />
+                </TabPanel>
 
-                    <TabPanel value={activeTab} index={2}>
-                            <DataGrid
+                <TabPanel value={activeTab} index={2}>
+                    <DataGrid
                         rows={detailRows}
                         columns={albumsColumns}
                         paginationModel={detailPaginationModel}
                         onPaginationModelChange={handlePaginationModelChange}
+                        sortModel={detailSortModel}
+                        onSortModelChange={handleSortModelChange}
                         pageSizeOptions={[5, 10, 15]}
                         paginationMode="server"
+                        sortingMode="server"
                         rowCount={detailTotalCount}
                         loading={isLoading}
-                                autoHeight
+                        autoHeight
                         disableColumnFilter
                         disableColumnMenu
-                            />
-                    </TabPanel>
+                    />
+                </TabPanel>
             </Box>
         );
     };
@@ -399,6 +437,14 @@ const MasterDetailDataGrid = () => {
         setPaginationModel(newModel);
     }, []);
 
+    // Handle master table sort model changes
+    const handleSortModelChange = useCallback((newModel) => {
+        console.log('Master sort model changed:', newModel);
+        setSortModel(newModel);
+        // Reset expanded rows when sorting to avoid showing wrong details
+        setExpandedRows({});
+    }, []);
+
     if (error) {
         return <div>Error: {error}</div>;
     }
@@ -416,8 +462,11 @@ const MasterDetailDataGrid = () => {
                     loading={loading}
                     paginationModel={paginationModel}
                     onPaginationModelChange={handleMasterPaginationModelChange}
+                    sortModel={sortModel}
+                    onSortModelChange={handleSortModelChange}
                     pageSizeOptions={[5, 10, 15]}
                     paginationMode="server"
+                    sortingMode="server"
                     rowCount={totalRows}
                     disableColumnFilter
                     autoHeight
